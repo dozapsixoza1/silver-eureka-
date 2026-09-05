@@ -42,7 +42,8 @@ jobs:
       - name: Собрать APK из smali (apktool build)
         working-directory: project
         run: |
-          apktool b . -o ../flin_launcher_unsigned.apk
+          BUILD_TOOLS="$ANDROID_HOME/build-tools/34.0.0"
+          apktool b . --use-aapt2 -a "$BUILD_TOOLS/aapt2" -o ../flin_launcher_unsigned.apk
 
       - name: Выровнять APK (zipalign)
         run: |
