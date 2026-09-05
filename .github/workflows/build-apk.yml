@@ -1,0 +1,87 @@
+name: Build Flin RP Launcher APK
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch: {}
+
+env:
+  # <<< МЕНЯЕШЬ ТОЛЬКО ЭТИ ДВЕ СТРОЧКИ >>>
+  LAUNCHER_DOMAIN: "https://flinrpnastrka.vercel.app"
+  RELEASES_URL: "https://github.com/dozapsixoza1/silver-eureka-/releases/latest/download"
+  # Имя zip-файла, который ты загрузил в корень репозитория
+  SOURCE_ZIP: "flin-launcher-patched-source.zip"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Распаковать исходники лаунчера из zip
+        run: |
+          unzip -q "$SOURCE_ZIP" -d unpacked
+          # внутри архива всё лежит в подпапке flin_install/ — переносим наверх
+          mv unpacked/flin_install/* project/ 2>/dev/null || (mkdir -p project && mv unpacked/flin_install/* project/)
+          ls -la project
+
+      - name: Установить Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Установить apktool
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y apktool
+
+      - name: Установить Android build-tools (aapt2, zipalign, apksigner)
+        uses: android-actions/setup-android@v3
+
+      - name: Поставить build-tools нужной версии
+        run: sdkmanager "build-tools;34.0.0" "platforms;android-34"
+
+      - name: Подставить домен во все смали-файлы
+        working-directory: project
+        run: |
+          echo "Меняю плейсхолдер домена на: $LAUNCHER_DOMAIN"
+          grep -rl "ЗАМЕНИ-НА-СВОЙ-ПРОЕКТ.vercel.app" smali/ | while read -r f; do
+            sed -i "s#ЗАМЕНИ-НА-СВОЙ-ПРОЕКТ\.vercel\.app#${LAUNCHER_DOMAIN}#g" "$f"
+          done
+          grep -rl "ТВОЙ_РЕПОЗИТОРИЙ" smali/ | while read -r f; do
+            sed -i "s#https://github.com/psychokaratel/ТВОЙ_РЕПОЗИТОРИЙ/releases/latest/download#${RELEASES_URL}#g" "$f"
+          done
+          echo "Готово. Проверка, что плейсхолдеров не осталось:"
+          ! grep -rl "ЗАМЕНИ-НА-СВОЙ-ПРОЕКТ\|ТВОЙ_РЕПОЗИТОРИЙ" smali/ || (echo "ОШИБКА: остались незамененные плейсхолдеры" && exit 1)
+
+      - name: Собрать APK из smali (apktool build)
+        working-directory: project
+        run: |
+          apktool b . -o ../flin_launcher_unsigned.apk
+
+      - name: Выровнять APK (zipalign)
+        run: |
+          BUILD_TOOLS="$ANDROID_HOME/build-tools/34.0.0"
+          "$BUILD_TOOLS/zipalign" -v -p 4 flin_launcher_unsigned.apk flin_launcher_aligned.apk
+
+      - name: Сгенерировать ключ подписи
+        run: |
+          keytool -genkeypair -v -keystore debug.keystore \
+            -alias flinrp -keyalg RSA -keysize 2048 -validity 10000 \
+            -storepass flinrp123 -keypass flinrp123 \
+            -dname "CN=FlinRP, OU=FlinRP, O=FlinRP, L=Unknown, S=Unknown, C=RU"
+
+      - name: Подписать APK (apksigner)
+        run: |
+          BUILD_TOOLS="$ANDROID_HOME/build-tools/34.0.0"
+          "$BUILD_TOOLS/apksigner" sign \
+            --ks debug.keystore --ks-pass pass:flinrp123 \
+            --out flin_launcher_signed.apk \
+            flin_launcher_aligned.apk
+
+      - name: Загрузить готовый APK как артефакт
+        uses: actions/upload-artifact@v4
+        with:
+          name: flin_launcher_signed
+          path: flin_launcher_signed.apk
