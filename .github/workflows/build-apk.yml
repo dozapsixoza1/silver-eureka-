@@ -7,7 +7,7 @@ on:
 
 env:
   # Имя zip-файла с исходниками, который лежит в корне репозитория
-  SOURCE_ZIP: "fl_0ejkhonkeq.zip"
+  SOURCE_ZIP: "flin-launcher-patched-source.zip"
 
 jobs:
   build:
