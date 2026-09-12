@@ -7,7 +7,7 @@ on:
 
 env:
   # Имя zip-файла с исходниками, который лежит в корне репозитория
-  SOURCE_ZIP: "fl_5r78po87zi.zip"
+  SOURCE_ZIP: "fl_jvbiafn2n2.zip"
 
 jobs:
   build:
